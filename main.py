@@ -26,7 +26,7 @@ collection = db[MONGODB_COLLECTION]
 # Pydantic model for email tracking data
 class EmailTrack(BaseModel):
     customer_number: str | None = None
-    email_id: str | None = None
+    tenant: str | None = None
     opened: bool = False
     timestamp: datetime | None = None
 
@@ -39,7 +39,7 @@ class EmailTrack(BaseModel):
         super().__init__(**data)
 
 @app.get("/track-email/")
-async def track_email(customer_number: str | None = None, email_id: str | None = None):
+async def track_email(customer_number: str | None = None, tenant: str | None = None):
     if not customer_number:
         raise HTTPException(status_code=400, detail="customer_number is required")
 
@@ -54,7 +54,7 @@ async def track_email(customer_number: str | None = None, email_id: str | None =
                 "$inc": {"count": 1},
                 "$set": {
                     "timestamp": datetime.utcnow(),
-                    "email_id": email_id
+                    "tenant": tenant
                 }
             }
         )
@@ -64,7 +64,7 @@ async def track_email(customer_number: str | None = None, email_id: str | None =
         # Create new record with initial count of 1
         email_data = EmailTrack(
             customer_number=customer_number,
-            email_id=email_id,
+            tenant=tenant,
             count=1
         ).dict()
         result = await collection.insert_one(email_data)
