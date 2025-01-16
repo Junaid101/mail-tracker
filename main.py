@@ -40,15 +40,38 @@ class EmailTrack(BaseModel):
 
 @app.get("/track-email/")
 async def track_email(customer_number: str | None = None, email_id: str | None = None):
-    email_data = EmailTrack(customer_number=customer_number, email_id=email_id).dict()
+    if not customer_number:
+        raise HTTPException(status_code=400, detail="customer_number is required")
 
-    print(email_data)
-    # Insert the email tracking data into the MongoDB collection
-    result = await collection.insert_one(email_data)
-    if result.inserted_id:
-        return {"message": "Email tracking data saved successfully!"}
+    # Try to find existing record for this customer
+    existing_record = await collection.find_one({"customer_number": customer_number})
+    
+    if existing_record:
+        # Update existing record with incremented count and new timestamp
+        result = await collection.update_one(
+            {"customer_number": customer_number},
+            {
+                "$inc": {"count": 1},
+                "$set": {
+                    "timestamp": datetime.utcnow(),
+                    "email_id": email_id
+                }
+            }
+        )
+        if result.modified_count:
+            return {"message": "Email tracking data updated successfully!"}
     else:
-        raise HTTPException(status_code=500, detail="Failed to save email tracking data")
+        # Create new record with initial count of 1
+        email_data = EmailTrack(
+            customer_number=customer_number,
+            email_id=email_id,
+            count=1
+        ).dict()
+        result = await collection.insert_one(email_data)
+        if result.inserted_id:
+            return {"message": "Email tracking data saved successfully!"}
+
+    raise HTTPException(status_code=500, detail="Failed to save email tracking data")
 
 @app.get("/")
 def read_root():
