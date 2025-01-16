@@ -38,10 +38,11 @@ class EmailTrack(BaseModel):
             data["timestamp"] = datetime.utcnow()
         super().__init__(**data)
 
-@app.post("/track-email/")
-async def track_email(data: EmailTrack):
-    email_data = data.dict()
-    
+@app.get("/track-email/")
+async def track_email(customer_number: str | None = None, email_id: str | None = None):
+    email_data = EmailTrack(customer_number=customer_number, email_id=email_id).dict()
+
+    print(email_data)
     # Insert the email tracking data into the MongoDB collection
     result = await collection.insert_one(email_data)
     if result.inserted_id:
@@ -51,5 +52,5 @@ async def track_email(data: EmailTrack):
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Email Tracker API!"}
+    return {"message": "Welcome to the Email Tracker API 2!"}
 
