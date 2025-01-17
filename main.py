@@ -116,5 +116,6 @@ async def track_email(request):
 async def read_root(request):
     return json({"message": "Welcome to the Email Tracker API v2.4.6!"})
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
+# For serverless deployment, we export the app instance directly
+# rather than running the server explicitly
+app = app
