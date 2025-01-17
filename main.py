@@ -6,6 +6,8 @@ import os
 from dotenv import load_dotenv
 from enum import Enum
 from typing import Literal
+import asyncio
+import nest_asyncio
 
 # Load environment variables
 if os.getenv("ENVIRONMENT") == "production":
@@ -24,6 +26,13 @@ MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "emails")
 client = AsyncIOMotorClient(MONGODB_URI)
 db = client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
+
+# Apply nest_asyncio to allow nested event loops
+nest_asyncio.apply()
+
+# Create a new event loop
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # Define valid tenants
 class TenantEnum(str, Enum):
