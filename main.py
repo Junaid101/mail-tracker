@@ -93,7 +93,11 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
 
         raise HTTPException(status_code=500, detail="Failed to save email tracking data")
     except Exception as e:
-        print(e)
+        return {
+            "status_code": 500,
+            "message": "Unknown Error",
+            "errors": str(e)
+        }
 
 @app.get("/")
 def read_root():
