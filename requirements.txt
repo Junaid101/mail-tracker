@@ -1,5 +1,4 @@
-fastapi
-uvicorn[standard]
+sanic
 motor
-pydantic
 python-dotenv
+pydantic

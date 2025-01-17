@@ -1,11 +1,11 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ValidationError
+from sanic import Sanic, json
+from sanic.exceptions import SanicException
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 from enum import Enum
-from contextlib import asynccontextmanager
+from pydantic import BaseModel, ValidationError
 
 # Load environment variables
 if os.getenv("ENVIRONMENT") == "production":
@@ -23,52 +23,57 @@ class TenantEnum(str, Enum):
     AADVANTO = "aadvanto"
     MOVIDO = "movido"
 
-# Pydantic model for email tracking data
-class EmailTrack(BaseModel):
-    customer_number: str
-    tenant: TenantEnum | None = None
-    opened: bool = False
-    timestamp: datetime | None = None
-    count: int | None = 0
+# Initialize Sanic app
+app = Sanic("email_tracker")
 
-    class Config:
-        extra = "ignore"
-
-    def __init__(self, **data):
-        if "timestamp" not in data:
-            data["timestamp"] = datetime.utcnow()
-        super().__init__(**data)
-
-# Initialize MongoDB client at module level
-client = AsyncIOMotorClient(MONGODB_URI)
-db = client[MONGODB_DB]
-collection = db[MONGODB_COLLECTION]
-
-app = FastAPI()
-
-@app.get("/track-email/")
-async def track_email(customer_number: str | None = None, tenant: str | None = None):
+# Database connection function
+async def get_database():
     try:
-        # Verify connection is alive
+        client = AsyncIOMotorClient(MONGODB_URI)
+        await client.admin.command('ping')
+        return client[MONGODB_DB][MONGODB_COLLECTION]
+    except Exception as e:
+        return None
+
+# Define validation model
+class EmailTrackRequest(BaseModel):
+    customer_number: str
+    tenant: TenantEnum
+
+@app.get("/track-email")
+async def track_email(request):
+    try:
+        # Validate request data
         try:
-            await client.admin.command('ping')
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "message": "Database connection failed",
-                    "errors": str(e)
-                }
+            data = EmailTrackRequest(
+                customer_number=request.args.get('customer_number'),
+                tenant=request.args.get('tenant')
+            )
+        except ValidationError as e:
+            return json(
+                {
+                    "message": "Validation error",
+                    "errors": e.errors()
+                },
+                status=400
             )
 
+        collection = await get_database()
         if collection is None:
-            raise HTTPException(status_code=500, detail="Database collection not initialized")
+            return json(
+                {
+                    "message": "Database connection failed",
+                    "errors": "Could not establish database connection"
+                },
+                status=500
+            )
 
-        email_data = EmailTrack(
-            customer_number=customer_number,
-            tenant=tenant
-        )
-        existing_record = await collection.find_one({"customer_number": customer_number, "tenant": tenant})
+        # Try to find existing record
+        existing_record = await collection.find_one({
+            "customer_number": data.customer_number,
+            "tenant": data.tenant
+        })
+
         if existing_record:
             result = await collection.update_one(
                 {"_id": existing_record["_id"]},
@@ -76,32 +81,40 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
                     "$inc": {"count": 1},
                     "$set": {
                         "timestamp": datetime.utcnow(),
-                        "tenant": tenant
+                        "tenant": data.tenant
                     }
                 }
             )
             if result.modified_count:
-                return {"message": "Email tracking data updated successfully!"}
+                return json({"message": "Email tracking data updated successfully!"})
         else:
-            email_data = EmailTrack(
-                customer_number=customer_number,
-                tenant=tenant,
-                count=1
-            ).model_dump()
+            email_data = {
+                "customer_number": data.customer_number,
+                "tenant": data.tenant,
+                "timestamp": datetime.utcnow(),
+                "count": 1
+            }
             result = await collection.insert_one(email_data)
             if result.inserted_id:
-                return {"message": "Email tracking data saved successfully!"}
+                return json({"message": "Email tracking data saved successfully!"})
 
-        raise HTTPException(status_code=500, detail="Failed to save email tracking data")
+        return json(
+            {"message": "Failed to save email tracking data"},
+            status=500
+        )
+
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail={
+        return json(
+            {
                 "message": "Unknown Error",
                 "errors": str(e)
-            }
+            },
+            status=500
         )
 
 @app.get("/")
-def read_root():
-    return {"message": "Welcome to the Email Tracker API v2.4.5!"}
+async def read_root(request):
+    return json({"message": "Welcome to the Email Tracker API v2.4.5!"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)
