@@ -87,18 +87,20 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
                 customer_number=customer_number,
                 tenant=tenant,
                 count=1
-            ).dict()
+            ).model_dump()
             result = await collection.insert_one(email_data)
             if result.inserted_id:
                 return {"message": "Email tracking data saved successfully!"}
 
         raise HTTPException(status_code=500, detail="Failed to save email tracking data")
     except Exception as e:
-        return {
-            "status_code": 500,
-            "message": "Unknown Error",
-            "errors": str(e)
-        }
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Unknown Error",
+                "errors": str(e)
+            }
+        )
 
 @app.get("/")
 def read_root():
