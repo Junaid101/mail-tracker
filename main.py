@@ -19,6 +19,11 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "email_tracker_db")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "emails")
 
+# Initialize MongoDB client globally
+client = None
+db = None
+collection = None
+
 # Define valid tenants
 class TenantEnum(str, Enum):
     AADVANTO = "aadvanto"
@@ -44,10 +49,12 @@ class EmailTrack(BaseModel):
 @asynccontextmanager
 async def lifespan(app):
     global client, db, collection
+    # Initialize MongoDB client
     client = AsyncIOMotorClient(MONGODB_URI)
     db = client[MONGODB_DB]
     collection = db[MONGODB_COLLECTION]
     yield
+    # Clean up MongoDB client
     client.close()
 
 app = FastAPI(lifespan=lifespan)
@@ -93,4 +100,4 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Email Tracker API v2.4.2!"}
+    return {"message": "Welcome to the Email Tracker API v2.4.3!"}
