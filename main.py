@@ -15,7 +15,23 @@ if os.getenv("ENVIRONMENT") == "production":
 else:
     load_dotenv(".env")
 
+# Apply nest_asyncio
+nest_asyncio.apply()
+
+# Create and set default event loop
+def get_or_create_event_loop():
+    try:
+        return asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+loop = get_or_create_event_loop()
+
+# Make sure your FastAPI app uses this loop
 app = FastAPI()
+app.loop = loop
 
 # MongoDB connection details
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
@@ -26,13 +42,6 @@ MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "emails")
 client = AsyncIOMotorClient(MONGODB_URI)
 db = client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
-
-# Apply nest_asyncio to allow nested event loops
-nest_asyncio.apply()
-
-# Create a new event loop
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
 
 # Define valid tenants
 class TenantEnum(str, Enum):
@@ -110,5 +119,4 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Email Tracker API v2.3!"}
-
+    return {"message": "Welcome to the Email Tracker API v2.4!"}
