@@ -39,28 +39,28 @@ class EmailTrack(BaseModel):
             data["timestamp"] = datetime.utcnow()
         super().__init__(**data)
 
-# Global variables for MongoDB client and collection
-client = None
-db = None
-collection = None
+# Initialize MongoDB client at module level
+client = AsyncIOMotorClient(MONGODB_URI)
+db = client[MONGODB_DB]
+collection = db[MONGODB_COLLECTION]
 
-# FastAPI app with lifespan context
-@asynccontextmanager
-async def lifespan(app):
-    global client, db, collection
-    # Initialize MongoDB client
-    client = AsyncIOMotorClient(MONGODB_URI)
-    db = client[MONGODB_DB]
-    collection = db[MONGODB_COLLECTION]
-    yield
-    # Close MongoDB client on shutdown
-    client.close()
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 @app.get("/track-email/")
 async def track_email(customer_number: str | None = None, tenant: str | None = None):
     try:
+        # Verify connection is alive
+        try:
+            await client.admin.command('ping')
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "message": "Database connection failed",
+                    "errors": str(e)
+                }
+            )
+
         if collection is None:
             raise HTTPException(status_code=500, detail="Database collection not initialized")
 
