@@ -6,8 +6,6 @@ import os
 from dotenv import load_dotenv
 from enum import Enum
 from typing import Literal
-import asyncio
-import nest_asyncio
 from contextlib import asynccontextmanager
 
 # Load environment variables
@@ -16,36 +14,15 @@ if os.getenv("ENVIRONMENT") == "production":
 else:
     load_dotenv(".env")
 
-# Apply nest_asyncio
-nest_asyncio.apply()
-
-@asynccontextmanager
-async def lifespan(app):
-    # Create and set new event loop on startup
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield
-    # Clean up on shutdown
-    loop.close()
-
-# Initialize FastAPI with lifespan
-app = FastAPI(lifespan=lifespan)
-
 # MongoDB connection details
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "email_tracker_db")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "emails")
 
-# Initialize the MongoDB client
-client = AsyncIOMotorClient(MONGODB_URI)
-db = client[MONGODB_DB]
-collection = db[MONGODB_COLLECTION]
-
 # Define valid tenants
 class TenantEnum(str, Enum):
     AADVANTO = "aadvanto"
     MOVIDO = "movido"
-    # Add more valid tenants as needed
 
 # Pydantic model for email tracking data
 class EmailTrack(BaseModel):
@@ -56,34 +33,34 @@ class EmailTrack(BaseModel):
     count: int | None = 0
 
     class Config:
-        extra = "ignore"  # Ignore additional fields in the input
-        
+        extra = "ignore"
+
     def __init__(self, **data):
         if "timestamp" not in data:
             data["timestamp"] = datetime.utcnow()
         super().__init__(**data)
 
+# FastAPI app
+@asynccontextmanager
+async def lifespan(app):
+    global client, db, collection
+    client = AsyncIOMotorClient(MONGODB_URI)
+    db = client[MONGODB_DB]
+    collection = db[MONGODB_COLLECTION]
+    yield
+    client.close()
+
+app = FastAPI(lifespan=lifespan)
+
 @app.get("/track-email/")
 async def track_email(customer_number: str | None = None, tenant: str | None = None):
     try:
-        # Validate the data using Pydantic model
-        try:
-            email_data = EmailTrack(
-                customer_number=customer_number,
-                tenant=tenant
-            )
-        except ValidationError as e:
-            return {
-                "status_code": 400,
-                "message": "Validation Error",
-                "errors": str(e)
-            }
-
-        # Try to find existing record for this customer
+        email_data = EmailTrack(
+            customer_number=customer_number,
+            tenant=tenant
+        )
         existing_record = await collection.find_one({"customer_number": customer_number, "tenant": tenant})
-        
         if existing_record:
-            # Update existing record with incremented count and new timestamp
             result = await collection.update_one(
                 {"_id": existing_record["_id"]},
                 {
@@ -97,7 +74,6 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
             if result.modified_count:
                 return {"message": "Email tracking data updated successfully!"}
         else:
-            # Create new record with initial count of 1
             email_data = EmailTrack(
                 customer_number=customer_number,
                 tenant=tenant,
