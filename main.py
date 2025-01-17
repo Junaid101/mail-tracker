@@ -5,7 +5,6 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 from enum import Enum
-from typing import Literal
 from contextlib import asynccontextmanager
 
 # Load environment variables
@@ -18,11 +17,6 @@ else:
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "email_tracker_db")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "emails")
-
-# Initialize MongoDB client globally
-client = None
-db = None
-collection = None
 
 # Define valid tenants
 class TenantEnum(str, Enum):
@@ -45,7 +39,12 @@ class EmailTrack(BaseModel):
             data["timestamp"] = datetime.utcnow()
         super().__init__(**data)
 
-# FastAPI app
+# Global variables for MongoDB client and collection
+client = None
+db = None
+collection = None
+
+# FastAPI app with lifespan context
 @asynccontextmanager
 async def lifespan(app):
     global client, db, collection
@@ -54,7 +53,7 @@ async def lifespan(app):
     db = client[MONGODB_DB]
     collection = db[MONGODB_COLLECTION]
     yield
-    # Clean up MongoDB client
+    # Close MongoDB client on shutdown
     client.close()
 
 app = FastAPI(lifespan=lifespan)
@@ -62,6 +61,9 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/track-email/")
 async def track_email(customer_number: str | None = None, tenant: str | None = None):
     try:
+        if collection is None:
+            raise HTTPException(status_code=500, detail="Database collection not initialized")
+
         email_data = EmailTrack(
             customer_number=customer_number,
             tenant=tenant
@@ -100,4 +102,4 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Email Tracker API v2.4.3!"}
+    return {"message": "Welcome to the Email Tracker API v2.4.4!"}
