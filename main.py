@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Literal
 import asyncio
 import nest_asyncio
+from contextlib import asynccontextmanager
 
 # Load environment variables
 if os.getenv("ENVIRONMENT") == "production":
@@ -18,20 +19,17 @@ else:
 # Apply nest_asyncio
 nest_asyncio.apply()
 
-# Create and set default event loop
-def get_or_create_event_loop():
-    try:
-        return asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
+@asynccontextmanager
+async def lifespan(app):
+    # Create and set new event loop on startup
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield
+    # Clean up on shutdown
+    loop.close()
 
-loop = get_or_create_event_loop()
-
-# Make sure your FastAPI app uses this loop
-app = FastAPI()
-app.loop = loop
+# Initialize FastAPI with lifespan
+app = FastAPI(lifespan=lifespan)
 
 # MongoDB connection details
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
@@ -119,4 +117,4 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Email Tracker API v2.4!"}
+    return {"message": "Welcome to the Email Tracker API v2.4.1!"}
