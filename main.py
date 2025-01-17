@@ -101,5 +101,5 @@ async def track_email(customer_number: str | None = None, tenant: str | None = N
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Email Tracker API v2.1!"}
+    return {"message": "Welcome to the Email Tracker API v2.2!"}
 
